@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Las Vegas GP – Track + Live Cams</title>
+  <link rel="preconnect" href="https://upload.wikimedia.org">
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root {
+      --bg: #0c0d14;
+      --panel: #161822;
+      --accent: #ff355d;
+      --text: #f5f7ff;
+      --muted: #9aa3c7;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+      background: #0c0d14;
+      color: var(--text);
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    #map {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      filter: saturate(1.1);
+    }
+    .scrim {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at 40% 30%, rgba(0,0,0,0.35), rgba(0,0,0,0.75));
+      z-index: 2;
+      pointer-events: none;
+    }
+    header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: grid;
+      gap: 18px;
+      padding: 16px 18px;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      align-items: center;
+      z-index: 3;
+      backdrop-filter: blur(12px);
+      background: linear-gradient(90deg, rgba(12,13,20,0.75), rgba(12,13,20,0.4));
+      border-bottom: 1px solid #1f2130;
+    }
+    @media (max-width: 900px) {
+      header { grid-template-columns: 1fr; }
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(1.7rem, 2vw + 1rem, 2.4rem);
+      letter-spacing: 0.03em;
+    }
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .map-wrap { display: none; } /* hidden legacy block */
+    .leaflet-popup-content {
+      margin: 8px 8px 10px;
+    }
+    .popup-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .popup-title::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px rgba(255,53,93,0.6);
+    }
+    .popup-video {
+      width: 320px;
+      max-width: 70vw;
+      aspect-ratio: 16 / 9;
+      border-radius: 10px;
+      background: #000;
+      display: block;
+    }
+    .legend {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      background: rgba(12,13,20,0.78);
+      border: 1px solid #1f2130;
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      color: var(--muted);
+      z-index: 3;
+      font-size: 0.92rem;
+      max-width: 320px;
+      line-height: 1.45;
+      backdrop-filter: blur(8px);
+    }
+  </style>
+</head>
+  <body>
+    <div id="map"></div>
+    <div class="scrim"></div>
+    <header>
+      <div>
+        <h1>Las Vegas Grand Prix – live from NDOT cams</h1>
+        <p>Tap a pin on the Strip map to pop open the nearby NDOT camera. Streams are direct HLS feeds; unmute inside the popup if you want ambient track noise.</p>
+      </div>
+      <div class="map-wrap">
+        <img
+          class="map"
+          src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/2023_Las_Vegas_street_circuit.svg/1280px-2023_Las_Vegas_street_circuit.svg.png"
+          alt="Las Vegas GP track map"
+          onerror="this.style.display='none';">
+      </div>
+    </header>
+
+    <div class="legend">
+      Note: Safari plays HLS natively; Chrome/Edge/Firefox use hls.js. If a feed is black, close/reopen the popup or refresh—DOT cams occasionally drop.
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/hls.js@1.5.14/dist/hls.min.js"></script>
+    <script>
+      const cams = [
+        { name: "Sands Ave & Palazzo – Sphere F1", url: "https://d1wse4.its.nv.gov:443/vegasxcd04/84512278-97ad-4bc7-af27-24d3251c6396_lvflirxcd04_public.stream/playlist.m3u8", lat: 36.1230, lng: -115.1660 },
+        { name: "Las Vegas Blvd & Spring Mountain – Sphere F1", url: "https://d1wse2.its.nv.gov:443/vegasxcd02/d30da79c-c940-4369-8b3b-3cb086aaec28_lvflirxcd03_public.stream/playlist.m3u8", lat: 36.1271, lng: -115.1708 },
+        { name: "Las Vegas Blvd & Sirens Cove Blvd–Palazzo F1", url: "https://d1wse3.its.nv.gov:443/vegasxcd03/3bd493c4-4dc4-49f1-9238-a1753f23829b_lvflirxcd04_public.stream/playlist.m3u8", lat: 36.1257, lng: -115.1715 },
+        { name: "Las Vegas Blvd & Mirage–Venetian F1", url: "https://d1wse2.its.nv.gov:443/vegasxcd02/3d995f6b-442b-4fd0-a2b1-5c08245dc063_lvflirxcd03_public.stream/playlist.m3u8", lat: 36.1244, lng: -115.1719 },
+        { name: "Las Vegas Blvd & Harrahs–Mirage Exit F1", url: "https://d1wse2.its.nv.gov:443/vegasxcd02/6dc51cf7-33ad-454d-b129-b6043b4fc1f1_lvflirxcd03_public.stream/playlist.m3u8", lat: 36.1235, lng: -115.1717 },
+        { name: "Las Vegas Blvd & Caesars Dr F1", url: "https://d1wse2.its.nv.gov:443/vegasxcd02/164d50b6-4c0c-44ca-bb80-8dae3666f214_lvflirxcd03_public.stream/playlist.m3u8", lat: 36.1197, lng: -115.1728 },
+        { name: "Flamingo Rd & Las Vegas Blvd F1", url: "https://d1wse3.its.nv.gov:443/vegasxcd03/c250fce9-1e47-479e-99eb-a28ba37fe962_lvflirxcd03_public.stream/playlist.m3u8", lat: 36.1169, lng: -115.1728 },
+        { name: "Las Vegas Blvd & Bellagio F1", url: "https://d1wse2.its.nv.gov:443/vegasxcd02/333a58ca-72ea-4ca8-a641-b9bb0579b4ed_lvflirxcd03_public.stream/playlist.m3u8", lat: 36.1137, lng: -115.1749 },
+        { name: "Las Vegas Blvd & Harmon Ave Median–Cosmo F1", url: "https://d1wse2.its.nv.gov:443/vegasxcd02/fe3007b2-972a-4c91-ab9e-985a9109f9d6_lvflirxcd03_public.stream/playlist.m3u8", lat: 36.1090, lng: -115.1739 }
+      ];
+
+      const map = L.map("map", {
+        zoomControl: false,
+        minZoom: 14,
+        maxZoom: 18,
+        attributionControl: false
+      }).setView([36.1185, -115.1715], 15.5);
+
+      L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        maxZoom: 18,
+        attribution: "&copy; <a href='https://www.esri.com/'>Esri</a>, Maxar"
+      }).addTo(map);
+
+      L.control.zoom({ position: "bottomright" }).addTo(map);
+
+      const hlsPlayers = new Map();
+
+      function mountPlayer(videoEl, url) {
+        if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
+          videoEl.src = url;
+        } else if (window.Hls && Hls.isSupported()) {
+          const hls = new Hls({ liveDurationInfinity: true });
+          hls.loadSource(url);
+          hls.attachMedia(videoEl);
+          hlsPlayers.set(videoEl, hls);
+        } else {
+          videoEl.insertAdjacentHTML("afterend", "<p style='color:#f6d55c'>HLS not supported in this browser.</p>");
+        }
+      }
+
+      map.on("popupclose", (e) => {
+        const video = e.popup._contentNode.querySelector("video");
+        if (!video) return;
+        const hls = hlsPlayers.get(video);
+        if (hls) {
+          hls.destroy();
+          hlsPlayers.delete(video);
+        }
+        video.pause();
+        video.src = "";
+      });
+
+      cams.forEach((cam, idx) => {
+        const marker = L.circleMarker([cam.lat, cam.lng], {
+          radius: 8,
+          color: "#ff355d",
+          fillColor: "#ff355d",
+          fillOpacity: 0.9,
+          weight: 2
+        }).addTo(map);
+
+        const popupHtml = `
+          <div class="popup-title">${cam.name}</div>
+          <video class="popup-video" id="vid-${idx}" controls autoplay muted playsinline></video>
+        `;
+
+        marker.bindPopup(popupHtml, { maxWidth: 360, closeButton: true });
+
+        marker.on("popupopen", (evt) => {
+          const video = evt.popup._contentNode.querySelector(`#vid-${idx}`);
+          if (video && !video.src) {
+            mountPlayer(video, cam.url);
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
