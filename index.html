@@ -108,6 +108,18 @@
       line-height: 1.45;
       backdrop-filter: blur(8px);
     }
+    .cam-marker {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #e8ebf5;
+      border: 2px solid #c5cbdd;
+      display: grid;
+      place-items: center;
+      color: #1b1d29;
+      font-size: 14px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.4);
+    }
     .side-panel {
       position: fixed;
       top: 110px;
@@ -149,6 +161,11 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
+    }
+    .card.highlight {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(255,53,93,0.55), 0 14px 32px rgba(0,0,0,0.45);
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
     }
     .chip {
       display: inline-flex;
@@ -238,38 +255,22 @@
         }
       }
 
-      map.on("popupclose", (e) => {
-        const video = e.popup._contentNode.querySelector("video");
-        if (!video) return;
-        const hls = hlsPlayers.get(video);
-        if (hls) {
-          hls.destroy();
-          hlsPlayers.delete(video);
-        }
-        video.pause();
-        video.src = "";
-      });
-
       cams.forEach((cam, idx) => {
-        const marker = L.circleMarker([cam.lat, cam.lng], {
-          radius: 8,
-        color: "#ff355d",
-        fillColor: "#ff355d",
-        fillOpacity: 0.9,
-        weight: 2
-      }).addTo(map);
+        const marker = L.marker([cam.lat, cam.lng], {
+          icon: L.divIcon({
+            className: "",
+            html: `<div class="cam-marker">📷</div>`,
+            iconSize: [26, 26],
+            iconAnchor: [13, 13]
+          })
+        }).addTo(map);
 
-        const popupHtml = `
-          <div class="popup-title">${cam.name}</div>
-          <video class="popup-video" id="vid-${idx}" controls autoplay muted playsinline></video>
-        `;
-
-        marker.bindPopup(popupHtml, { maxWidth: 360, closeButton: true });
-
-        marker.on("popupopen", (evt) => {
-          const video = evt.popup._contentNode.querySelector(`#vid-${idx}`);
-          if (video && !video.src) {
-            mountPlayer(video, cam.url);
+        marker.on("click", () => {
+          const card = document.getElementById(`card-${idx}`);
+          if (card) {
+            card.scrollIntoView({ behavior: "smooth", block: "center" });
+            card.classList.add("highlight");
+            setTimeout(() => card.classList.remove("highlight"), 1800);
           }
         });
       });
@@ -279,6 +280,7 @@
       cams.forEach((cam, idx) => {
         const card = document.createElement("div");
         card.className = "card";
+        card.id = `card-${idx}`;
 
         const title = document.createElement("div");
         title.className = "chip";
